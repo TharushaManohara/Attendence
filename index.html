@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UniTracker - Attendance</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans text-gray-800">
+
+    <!-- LOGIN VIEW -->
+    <div id="login-view" class="h-screen flex items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md fade-in">
+            <h1 class="text-3xl font-bold text-blue-600 mb-2">Welcome Back</h1>
+            <p class="text-gray-500 mb-6">Enter your username to check attendance.</p>
+            
+            <input type="text" id="username-in" placeholder="Username (e.g. Sahan)" class="w-full p-3 mb-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <input type="password" id="pass-in" placeholder="Password" class="w-full p-3 mb-6 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            
+            <div class="flex gap-2">
+                <button id="login-btn" class="flex-1 bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700 transition">Log In</button>
+                <button id="register-btn" class="flex-1 bg-green-500 text-white p-3 rounded-lg font-bold hover:bg-green-600 transition">Sign Up</button>
+            </div>
+            <p id="login-error" class="text-red-500 text-sm mt-3 text-center hidden"></p>
+            <p class="text-xs text-gray-400 mt-4 text-center">New student? Enter details above and click Sign Up.</p>
+        </div>
+    </div>
+
+    <!-- MAIN APP VIEW -->
+    <div id="app-view" class="hidden min-h-screen">
+        
+        <nav class="bg-white shadow-md p-4 flex justify-between items-center sticky top-0 z-50">
+            <h1 class="text-xl font-bold text-blue-600">UniTracker</h1>
+            <div class="flex gap-4">
+                <button id="admin-btn" class="hidden bg-purple-100 text-purple-700 px-4 py-2 rounded-lg font-medium hover:bg-purple-200">Admin Panel</button>
+                <button id="logout-btn" class="text-gray-500 hover:text-red-500 font-medium">Logout</button>
+            </div>
+        </nav>
+
+        <div class="container mx-auto p-6 max-w-4xl">
+            
+            <!-- STUDENT DASHBOARD -->
+            <div id="student-dashboard" class="fade-in">
+                <div class="bg-blue-600 p-6 rounded-2xl shadow-lg mb-6 text-white relative overflow-hidden">
+                    <div class="relative z-10 flex justify-between items-center">
+                        <div>
+                            <h2 id="user-name" class="text-2xl font-bold">Hello!</h2>
+                            <p class="opacity-80">Tap 'Present' or 'Missed' to track attendance.</p>
+                        </div>
+                        
+                        <!-- CIRCLE CHART -->
+                        <div class="relative w-24 h-24 flex items-center justify-center bg-blue-800 rounded-full shadow-lg">
+                            <!-- Ring -->
+                            <div id="chart-ring" class="absolute w-full h-full rounded-full" 
+                                 style="background: conic-gradient(#4ade80 0%, #4ade80 0%, #ffffff33 0%); mask: radial-gradient(transparent 55%, black 56%); -webkit-mask: radial-gradient(transparent 55%, black 56%);">
+                            </div>
+                            <!-- Text -->
+                            <div class="relative z-10 text-center">
+                                <h3 id="overall-percent" class="text-2xl font-black">0%</h3>
+                                <p class="text-[8px] uppercase font-bold opacity-60">Overall</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-blue-500 rounded-full opacity-50"></div>
+                </div>
+
+                <!-- DATE PICKER FOR BACKDATING -->
+                <div class="bg-white p-4 rounded-xl shadow-sm mb-6 flex items-center gap-4 border border-blue-100">
+                    <label class="font-bold text-gray-700">Marking for Date:</label>
+                    <input type="date" id="attendance-date" class="p-2 border rounded-lg focus:outline-none focus:border-blue-500 font-bold text-blue-600">
+                    <span class="text-xs text-gray-400 italic">(Change this to add past attendance)</span>
+                </div>
+
+                <div id="subjects-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Cards injected by JS -->
+                </div>
+            </div>
+
+            <!-- ADMIN DASHBOARD -->
+            <div id="admin-dashboard" class="hidden fade-in">
+                
+                <!-- HEADER -->
+                <div class="flex justify-between items-center mb-8">
+                    <div>
+                        <h2 class="text-3xl font-bold text-gray-800">Admin Panel</h2>
+                        <p class="text-gray-500">Manage subjects and student records.</p>
+                    </div>
+                    <button id="show-student-view-btn" class="bg-gray-100 text-gray-600 px-4 py-2 rounded-lg font-bold hover:bg-gray-200 transition">
+                        &larr; Student View
+                    </button>
+                </div>
+
+                <!-- 1. MANAGE SUBJECTS SECTION -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm mb-8 border-l-4 border-blue-500">
+                    <h3 class="font-bold text-lg mb-4 text-gray-800 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                        Global Subjects
+                    </h3>
+                    
+                    <!-- Subject List -->
+                    <div id="admin-subjects-list" class="flex flex-wrap gap-3 mb-4"></div>
+
+                    <!-- Add Subject Form -->
+                    <div class="flex gap-2 max-w-md">
+                        <input id="new-subject-name" type="text" placeholder="Add new subject..." class="flex-1 p-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
+                        <button id="add-subject-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-700 transition">+</button>
+                    </div>
+                </div>
+
+                <div class="flex flex-col-reverse lg:grid lg:grid-cols-2 gap-8">
+                    
+                    <!-- 2. STUDENT LIST (Left Column on Desktop, Bottom on Mobile) -->
+                    <div>
+                        <h3 class="font-bold text-lg mb-4 text-gray-800">Registered Students</h3>
+                        <div id="admin-list" class="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+                            <!-- List Items -->
+                        </div>
+                    </div>
+
+                    <!-- 3. EDIT FORM (Right Column on Desktop, Top on Mobile) -->
+                    <div class="h-fit lg:sticky lg:top-24">
+                        <div class="bg-white p-6 rounded-2xl shadow-lg border border-gray-100">
+                            <h3 class="font-bold text-lg mb-4 text-purple-700 border-b pb-2">Edit Student Records</h3>
+                            
+                            <div class="space-y-3 mb-6">
+                                <div>
+                                    <label class="text-xs font-bold text-gray-400 uppercase">Username (Email Prefix)</label>
+                                    <input id="admin-username-input" type="text" placeholder="e.g. nimal" class="w-full p-3 border rounded-lg bg-gray-50 focus:bg-white transition">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-bold text-gray-400 uppercase">Full Name</label>
+                                    <input id="admin-name" type="text" placeholder="e.g. Nimal Perera" class="w-full p-3 border rounded-lg bg-gray-50 focus:bg-white transition">
+                                </div>
+                            </div>
+                            
+                            <h3 class="font-bold text-gray-700 mb-2 text-sm">Attendance Counts</h3>
+                            <div id="dynamic-subject-inputs" class="grid grid-cols-1 gap-2 mb-6 max-h-60 overflow-y-auto border p-2 rounded bg-gray-50">
+                                <p class="text-gray-400 text-sm text-center py-4">Select a student from the list to edit.</p>
+                            </div>
+
+                            <button id="save-data-btn" class="w-full bg-purple-600 text-white py-3 rounded-lg font-bold hover:bg-purple-700 shadow-md transition transform active:scale-95">Save Changes</button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
