@@ -86,6 +86,7 @@ async function handleLogin() {
 }
 
 async function handleRegister() {
+    const fullNameIn = document.getElementById('fullname-in').value.trim();
     const userIn = document.getElementById('username-in').value.trim();
     const passIn = document.getElementById('pass-in').value;
     const err = document.getElementById('login-error');
@@ -104,22 +105,24 @@ async function handleRegister() {
         // 1. Create Auth User
         await createUserWithEmailAndPassword(auth, email, passIn);
         
-        // 2. Protect Existing Data (Don't overwrite if Admin already added them)
+        // 2. Set/Update User Data
+        // We use merge: true so we don't wipe out subjects if Admin pre-added them.
         const docRef = doc(db, "attendance", email);
-        const docSnap = await getDoc(docRef);
+        const displayName = fullNameIn || userIn; // Use Full Name if provided
 
-        if (!docSnap.exists()) {
-            // Only create new if it doesn't exist
-            await setDoc(docRef, {
-                name: userIn,
-                subjects: []
-            });
-        } else {
-            console.log("Linking to existing student data.");
+        await setDoc(docRef, {
+            name: displayName
+        }, { merge: true });
+
+        // Ensure subjects array exists if it's a brand new doc
+        const snap = await getDoc(docRef);
+        if (snap.exists() && !snap.data().subjects) {
+            await setDoc(docRef, { subjects: [] }, { merge: true });
         }
 
         err.textContent = "Success! Logging in...";
-        // Auth state change will auto-redirect
+        // Reload to ensure UI picks up the correct name (avoid race condition with initAppData)
+        location.reload(); 
     } catch (e) {
         if(e.code === 'auth/email-already-in-use') {
             err.textContent = "Username '" + userIn + "' is already taken.";
@@ -197,7 +200,11 @@ async function loadStudentData(email) {
     // Set Date Picker to Today (if empty)
     const dateInput = document.getElementById('attendance-date');
     if (!dateInput.value) {
-        dateInput.valueAsDate = new Date();
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        dateInput.value = `${year}-${month}-${day}`;
     }
 
     const container = document.getElementById('subjects-container');
