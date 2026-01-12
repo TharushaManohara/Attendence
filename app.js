@@ -197,14 +197,25 @@ async function loadStudentData(email) {
 
     document.getElementById('user-name').textContent = `Hello, ${sName}`;
     
-    // Set Date Picker to Today (if empty)
+    // Set Date Picker to Today (Colombo Time)
     const dateInput = document.getElementById('attendance-date');
     if (!dateInput.value) {
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        dateInput.value = `${year}-${month}-${day}`;
+        try {
+            // Force Sri Lanka Timezone: YYYY-MM-DD
+            dateInput.value = new Intl.DateTimeFormat('en-CA', { 
+                timeZone: 'Asia/Colombo',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).format(new Date());
+        } catch (e) {
+            // Fallback to local
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            dateInput.value = `${year}-${month}-${day}`;
+        }
     }
 
     const container = document.getElementById('subjects-container');
