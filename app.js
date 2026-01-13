@@ -29,8 +29,14 @@ window.cloneStudentData = cloneStudentData;
 // --- INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', () => {
     // 1. Attach Event Listeners
+    // Auth Forms
     document.getElementById('login-btn').addEventListener('click', handleLogin);
-    document.getElementById('register-btn').addEventListener('click', handleRegister);
+    document.getElementById('do-register-btn').addEventListener('click', handleRegister);
+    
+    // Toggles
+    document.getElementById('show-register-btn').addEventListener('click', () => toggleAuthForm('register'));
+    document.getElementById('show-login-btn').addEventListener('click', () => toggleAuthForm('login'));
+
     document.getElementById('logout-btn').addEventListener('click', handleLogout);
     
     // Admin Buttons (may be hidden initially)
@@ -45,7 +51,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const saveDataBtn = document.getElementById('save-data-btn');
     if(saveDataBtn) saveDataBtn.addEventListener('click', saveStudentData);
+
+    const adminDeptSelect = document.getElementById('admin-dept-select');
+    if(adminDeptSelect) {
+        adminDeptSelect.addEventListener('change', async (e) => {
+            await loadGlobalSubjects(e.target.value);
+            renderAdminSubjects();
+            renderAdminStudentInputs();
+        });
+    }
 });
+
+function toggleAuthForm(target) {
+    const loginForm = document.getElementById('login-form');
+    const regForm = document.getElementById('register-form');
+    
+    // Reset errors
+    document.getElementById('login-error-msg').classList.add('hidden');
+    document.getElementById('reg-error-msg').classList.add('hidden');
+
+    if (target === 'register') {
+        loginForm.classList.add('hidden');
+        regForm.classList.remove('hidden');
+    } else {
+        regForm.classList.add('hidden');
+        loginForm.classList.remove('hidden');
+    }
+}
 
 // --- AUTHENTICATION ---
 onAuthStateChanged(auth, (user) => {
@@ -63,9 +95,9 @@ onAuthStateChanged(auth, (user) => {
 });
 
 async function handleLogin() {
-    const userIn = document.getElementById('username-in').value.trim();
-    const passIn = document.getElementById('pass-in').value;
-    const err = document.getElementById('login-error');
+    const userIn = document.getElementById('login-user').value.trim();
+    const passIn = document.getElementById('login-pass').value;
+    const err = document.getElementById('login-error-msg');
 
     if (!userIn || !passIn) {
         err.textContent = "Enter username and password.";
@@ -86,13 +118,20 @@ async function handleLogin() {
 }
 
 async function handleRegister() {
-    const fullNameIn = document.getElementById('fullname-in').value.trim();
-    const userIn = document.getElementById('username-in').value.trim();
-    const passIn = document.getElementById('pass-in').value;
-    const err = document.getElementById('login-error');
+    const fullNameIn = document.getElementById('reg-fullname').value.trim();
+    const deptIn = document.getElementById('reg-dept').value;
+    const userIn = document.getElementById('reg-user').value.trim();
+    const passIn = document.getElementById('reg-pass').value;
+    const err = document.getElementById('reg-error-msg');
 
     if (!userIn || !passIn) {
-        err.textContent = "Enter a username and password to register.";
+        err.textContent = "All fields are required.";
+        err.classList.remove('hidden');
+        return;
+    }
+    
+    if (!deptIn) {
+        err.textContent = "Please select a department.";
         err.classList.remove('hidden');
         return;
     }
@@ -106,12 +145,12 @@ async function handleRegister() {
         await createUserWithEmailAndPassword(auth, email, passIn);
         
         // 2. Set/Update User Data
-        // We use merge: true so we don't wipe out subjects if Admin pre-added them.
         const docRef = doc(db, "attendance", email);
-        const displayName = fullNameIn || userIn; // Use Full Name if provided
+        const displayName = fullNameIn || userIn; 
 
         await setDoc(docRef, {
-            name: displayName
+            name: displayName,
+            department: deptIn
         }, { merge: true });
 
         // Ensure subjects array exists if it's a brand new doc
@@ -121,7 +160,6 @@ async function handleRegister() {
         }
 
         err.textContent = "Success! Logging in...";
-        // Reload to ensure UI picks up the correct name (avoid race condition with initAppData)
         location.reload(); 
     } catch (e) {
         if(e.code === 'auth/email-already-in-use') {
@@ -138,18 +176,29 @@ function handleLogout() {
 
 // --- DATA LOADING ---
 async function initAppData(email) {
-    // 1. Load Global Subjects
-    await loadGlobalSubjects();
-
-    // 2. Ensure User Document Exists (Auto-Create)
     const docRef = doc(db, "attendance", email);
-    const snap = await getDoc(docRef);
+    let snap = await getDoc(docRef);
+
+    // SECURITY: If user is NOT Admin and doc is missing, they were deleted.
     if (!snap.exists()) {
-        await setDoc(docRef, {
-            name: email.split('@')[0], // Default name
-            subjects: []
-        });
+        if (email === "tharusha@uni.com") {
+            // Auto-create only for Admin if missing (prevent lockout)
+            await setDoc(docRef, { name: "Admin", department: "CE", subjects: [] });
+            snap = await getDoc(docRef);
+        } else {
+            // Force Logout for deleted students
+            alert("Your account has been deactivated or deleted by the Admin.");
+            await signOut(auth);
+            location.reload();
+            return;
+        }
     }
+
+    const userData = snap.data();
+    const userDept = userData.department || 'CE';
+
+    // 2. Load Global Subjects for this department
+    await loadGlobalSubjects(userDept);
 
     // 3. Load Student Data
     await loadStudentData(email);
@@ -163,15 +212,34 @@ async function initAppData(email) {
     }
 }
 
-async function loadGlobalSubjects() {
+async function loadGlobalSubjects(dept = 'CE') {
+    // CS and SE share the same subjects
+    const targetDept = (dept === 'SE') ? 'CS' : dept;
+
     try {
-        const snap = await getDoc(doc(db, "settings", "subjects"));
+        let snap = await getDoc(doc(db, "settings", `subjects_${targetDept}`));
+        
+        // Fallback for transition: if subjects_CE doesn't exist, check old 'subjects'
+        if (!snap.exists() && targetDept === 'CE') {
+            const oldSnap = await getDoc(doc(db, "settings", "subjects"));
+            if (oldSnap.exists()) {
+                globalSubjects = oldSnap.data().list || [];
+                // Save it to the new location
+                await setDoc(doc(db, "settings", "subjects_CE"), { list: globalSubjects });
+                return;
+            }
+        }
+
         if (snap.exists()) {
             globalSubjects = snap.data().list || [];
         } else {
-            // Default Init
-            globalSubjects = [{name:"OS"}, {name:"CAL"}, {name:"AOOP"}, {name:"SDI"}];
-            await setDoc(doc(db, "settings", "subjects"), { list: globalSubjects });
+            // Default Init based on department
+            if (targetDept === 'CS') { // CS & SE share this
+                globalSubjects = [{name:"Algorithms"}, {name:"Machine Learning"}, {name:"Data Science"}, {name:"Networking"}];
+            } else {
+                globalSubjects = [{name:"OS"}, {name:"CAL"}, {name:"AOOP"}, {name:"SDI"}];
+            }
+            await setDoc(doc(db, "settings", `subjects_${targetDept}`), { list: globalSubjects });
         }
     } catch (e) {
         console.error("Subject Load Error", e);
@@ -189,13 +257,16 @@ async function loadStudentData(email) {
     
     let sName = email.split('@')[0];
     let sSubjects = [];
+    let sDept = 'CE';
 
     if (snap.exists()) {
         sName = snap.data().name;
         sSubjects = snap.data().subjects || [];
+        sDept = snap.data().department || 'CE';
     }
 
     document.getElementById('user-name').textContent = `Hello, ${sName}`;
+    document.getElementById('user-dept').textContent = sDept;
     
     // Set Date Picker to Today (Colombo Time)
     const dateInput = document.getElementById('attendance-date');
@@ -423,6 +494,11 @@ function renderAdminSubjects() {
 async function addSubject() {
     const input = document.getElementById('new-subject-name');
     const val = input.value.trim();
+    let dept = document.getElementById('admin-dept-select').value;
+    
+    // CS and SE share the same subjects
+    if (dept === 'SE') dept = 'CS';
+
     if(!val) {
         alert("Please enter a subject name.");
         return;
@@ -436,13 +512,13 @@ async function addSubject() {
 
     try {
         // Fetch latest list first to be safe
-        const snap = await getDoc(doc(db, "settings", "subjects"));
+        const snap = await getDoc(doc(db, "settings", `subjects_${dept}`));
         let currentList = [];
         if(snap.exists()) currentList = snap.data().list || [];
 
         currentList.push({name: val});
         
-        await setDoc(doc(db, "settings", "subjects"), { list: currentList });
+        await setDoc(doc(db, "settings", `subjects_${dept}`), { list: currentList });
         
         // Update local state
         globalSubjects = currentList;
@@ -450,15 +526,19 @@ async function addSubject() {
         input.value = '';
         renderAdminSubjects();
         renderAdminStudentInputs();
-        alert(`Added subject: ${val}`);
+        alert(`Added subject: ${val} to ${dept} (Shared with SE)`);
     } catch (e) {
         alert("Error adding subject: " + e.message);
     }
 }
 async function deleteSubject(name) {
     if(!confirm("Delete " + name + "?")) return;
+    let dept = document.getElementById('admin-dept-select').value;
+    // CS and SE share the same subjects
+    if (dept === 'SE') dept = 'CS';
+
     globalSubjects = globalSubjects.filter(s => s.name !== name);
-    await setDoc(doc(db, "settings", "subjects"), { list: globalSubjects });
+    await setDoc(doc(db, "settings", `subjects_${dept}`), { list: globalSubjects });
     renderAdminSubjects();
     renderAdminStudentInputs();
 }
@@ -484,6 +564,7 @@ function renderAdminStudentInputs() {
 async function saveStudentData() {
     const user = document.getElementById('admin-username-input').value;
     const name = document.getElementById('admin-name').value;
+    const department = document.getElementById('admin-dept-input').value;
     if(!user || !name) { alert("Enter username & name"); return; }
 
     const email = user + "@uni.com";
@@ -528,7 +609,7 @@ async function saveStudentData() {
         };
     });
 
-    await setDoc(docRef, { name, subjects: subs });
+    await setDoc(docRef, { name, subjects: subs, department });
     alert("Saved! (History synced to counts)");
     loadAllStudentsList();
 }
@@ -557,14 +638,15 @@ async function loadAllStudentsList() {
 
             // Fallback for Name
             const nameDisplay = data.name || "Unknown Name";
+            const deptDisplay = data.department || "CE";
 
             const json = JSON.stringify(data.subjects || []);
             
             list.innerHTML += `
                 <div class="flex items-center justify-between p-3 border rounded hover:bg-gray-50 transition">
-                    <div class="cursor-pointer flex-1" onclick='fillAdminForm("${userDisplay}", "${nameDisplay}", ${json})'>
+                    <div class="cursor-pointer flex-1" onclick='fillAdminForm("${userDisplay}", "${nameDisplay}", ${json}, "${deptDisplay}")'>
                         <span class="font-bold block text-gray-800">${nameDisplay}</span>
-                        <span class="text-xs text-gray-400">${userDisplay}</span>
+                        <span class="text-xs text-gray-400">${userDisplay} | ${deptDisplay}</span>
                     </div>
                     <div class="flex gap-1">
                         <button onclick="cloneStudentData('${d.id}')" class="bg-blue-50 text-blue-500 p-2 rounded hover:bg-blue-100 transition" title="Clone to All">
@@ -587,13 +669,19 @@ async function loadAllStudentsList() {
 }
 
 async function cloneStudentData(sourceId) {
-    if(!confirm(`Copy all attendance details from "${sourceId}" to ALL other students?\nThis will overwrite their current data!`)) return;
+    if(!confirm(`Copy all attendance details from "${sourceId}" to ALL matching students?\n(CS & SE are linked, CE is separate)`)) return;
 
     try {
         const snap = await getDoc(doc(db, "attendance", sourceId));
         if(!snap.exists()) return;
         
-        const sourceSubjects = snap.data().subjects || [];
+        const sourceData = snap.data();
+        const sourceSubjects = sourceData.subjects || [];
+        const sourceDept = sourceData.department || 'CE';
+        
+        // Determine Target Group
+        const isSourceCS_SE = (sourceDept === 'CS' || sourceDept === 'SE');
+
         const allStudentsSnap = await getDocs(collection(db, "attendance"));
         
         let count = 0;
@@ -601,13 +689,27 @@ async function cloneStudentData(sourceId) {
 
         allStudentsSnap.forEach(studentDoc => {
             if (studentDoc.id !== sourceId) {
-                const studentName = studentDoc.data().name;
-                // Update their doc with source subjects but keep their name
-                promises.push(setDoc(doc(db, "attendance", studentDoc.id), {
-                    name: studentName,
-                    subjects: sourceSubjects
-                }));
-                count++;
+                const targetData = studentDoc.data();
+                const targetDept = targetData.department || 'CE';
+                const isTargetCS_SE = (targetDept === 'CS' || targetDept === 'SE');
+
+                // Logic: 
+                // If Source is CS/SE, clone to all CS & SE students.
+                // If Source is CE, clone only to CE students.
+                
+                let shouldClone = false;
+                if (isSourceCS_SE && isTargetCS_SE) shouldClone = true;
+                if (!isSourceCS_SE && !isTargetCS_SE) shouldClone = true; // CE -> CE
+
+                if (shouldClone) {
+                    // Update their doc with source subjects but keep their name & dept
+                    promises.push(setDoc(doc(db, "attendance", studentDoc.id), {
+                        name: targetData.name,
+                        department: targetDept,
+                        subjects: sourceSubjects
+                    }));
+                    count++;
+                }
             }
         });
 
@@ -633,10 +735,21 @@ async function deleteStudent(docId) {
     }
 }
 
-function fillAdminForm(user, name, subs) {
+async function fillAdminForm(user, name, subs, dept) {
     document.getElementById('admin-username-input').value = user;
     document.getElementById('admin-name').value = name;
-    renderAdminStudentInputs(); // Reset
+    if(document.getElementById('admin-dept-input')) {
+        document.getElementById('admin-dept-input').value = dept || 'CE';
+    }
+    
+    // Set dept selector and load those subjects
+    const deptSelect = document.getElementById('admin-dept-select');
+    if(deptSelect && dept) {
+        deptSelect.value = dept;
+        await loadGlobalSubjects(dept);
+        renderAdminSubjects();
+        renderAdminStudentInputs();
+    }
     
     subs.forEach(s => {
         const safe = s.name.replace(/\s+/g, '-');
