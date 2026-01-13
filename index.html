@@ -110,14 +110,32 @@
                     <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-blue-500 rounded-full opacity-50"></div>
                 </div>
 
-                <!-- DATE PICKER FOR BACKDATING -->
-                <div class="bg-white p-4 rounded-xl shadow-sm mb-6 flex items-center gap-4 border border-blue-100">
-                    <label class="font-bold text-gray-700">Marking for Date:</label>
-                    <input type="date" id="attendance-date" class="p-2 border rounded-lg focus:outline-none focus:border-blue-500 font-bold text-blue-600">
-                    <span class="text-xs text-gray-400 italic">(Change this to add past attendance)</span>
+                <!-- ALERT BANNER -->
+                <div id="low-attendance-alert" class="hidden bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded shadow-sm mb-6 fade-in">
+                    <p class="font-bold flex items-center gap-2">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                        Critical Attendance Alert!
+                    </p>
+                    <p class="text-sm mt-1">Your attendance is below 80% for: <span id="alert-subjects" class="font-bold"></span>. Please attend the next lectures!</p>
                 </div>
 
-                <div id="subjects-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- VIEW TOGGLE & DATE PICKER -->
+                <div class="bg-white p-2 rounded-xl shadow-sm mb-6 flex flex-col md:flex-row justify-between items-center gap-4 border border-blue-100">
+                    
+                    <!-- View Switcher -->
+                    <div class="flex bg-gray-100 p-1 rounded-lg w-full md:w-auto">
+                        <button id="view-today-btn" class="flex-1 px-4 py-2 rounded-md text-sm font-bold transition bg-white shadow text-blue-600">Today</button>
+                        <button id="view-all-btn" class="flex-1 px-4 py-2 rounded-md text-sm font-bold text-gray-500 hover:text-gray-700 transition">Full Timetable</button>
+                    </div>
+
+                    <!-- Date Picker -->
+                    <div class="flex items-center gap-2 w-full md:w-auto justify-end">
+                        <label class="text-xs font-bold text-gray-500 uppercase">Date:</label>
+                        <input type="date" id="attendance-date" class="p-1 border rounded-lg focus:outline-none focus:border-blue-500 font-bold text-gray-600 text-sm">
+                    </div>
+                </div>
+
+                <div id="subjects-container" class="space-y-6">
                     <!-- Cards injected by JS -->
                 </div>
             </div>
@@ -157,7 +175,16 @@
                     <div id="admin-subjects-list" class="flex flex-wrap gap-3 mb-4"></div>
 
                     <!-- Add Subject Form -->
-                    <div class="flex gap-2 max-w-md">
+                    <div class="flex gap-2 max-w-lg">
+                        <select id="new-subject-day" class="p-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 font-bold text-gray-600">
+                            <option value="Monday">Mon</option>
+                            <option value="Tuesday">Tue</option>
+                            <option value="Wednesday">Wed</option>
+                            <option value="Thursday">Thu</option>
+                            <option value="Friday">Fri</option>
+                            <option value="Saturday">Sat</option>
+                            <option value="Sunday">Sun</option>
+                        </select>
                         <input id="new-subject-name" type="text" placeholder="Add new subject..." class="flex-1 p-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
                         <button id="add-subject-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-700 transition">+</button>
                     </div>

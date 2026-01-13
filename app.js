@@ -18,6 +18,7 @@ const db = getFirestore(app);
 
 // GLOBAL STATE
 let globalSubjects = [];
+let currentViewMode = 'today'; // 'today' or 'all'
 
 // Make global for inline onclicks
 window.updateAttendance = updateAttendance;
@@ -25,6 +26,7 @@ window.fillAdminForm = fillAdminForm;
 window.deleteSubject = deleteSubject;
 window.deleteStudent = deleteStudent;
 window.cloneStudentData = cloneStudentData;
+window.updateSubjectDay = updateSubjectDay;
 
 // --- INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -36,6 +38,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Toggles
     document.getElementById('show-register-btn').addEventListener('click', () => toggleAuthForm('register'));
     document.getElementById('show-login-btn').addEventListener('click', () => toggleAuthForm('login'));
+
+    // View Switcher
+    const viewToday = document.getElementById('view-today-btn');
+    const viewAll = document.getElementById('view-all-btn');
+    if(viewToday && viewAll) {
+        viewToday.addEventListener('click', () => setViewMode('today'));
+        viewAll.addEventListener('click', () => setViewMode('all'));
+    }
 
     document.getElementById('logout-btn').addEventListener('click', handleLogout);
     
@@ -61,6 +71,30 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+function setViewMode(mode) {
+    currentViewMode = mode;
+    
+    // UI Highlight
+    const btnToday = document.getElementById('view-today-btn');
+    const btnAll = document.getElementById('view-all-btn');
+    
+    if(mode === 'today') {
+        btnToday.classList.add('bg-white', 'shadow', 'text-blue-600');
+        btnToday.classList.remove('text-gray-500');
+        btnAll.classList.remove('bg-white', 'shadow', 'text-blue-600');
+        btnAll.classList.add('text-gray-500');
+    } else {
+        btnAll.classList.add('bg-white', 'shadow', 'text-blue-600');
+        btnAll.classList.remove('text-gray-500');
+        btnToday.classList.remove('bg-white', 'shadow', 'text-blue-600');
+        btnToday.classList.add('text-gray-500');
+    }
+
+    // Reload Data to reflect view
+    const userEmail = auth.currentUser ? auth.currentUser.email : null;
+    if(userEmail) loadStudentData(userEmail);
+}
 
 function toggleAuthForm(target) {
     const loginForm = document.getElementById('login-form');
@@ -223,8 +257,14 @@ async function loadGlobalSubjects(dept = 'CE') {
         if (!snap.exists() && targetDept === 'CE') {
             const oldSnap = await getDoc(doc(db, "settings", "subjects"));
             if (oldSnap.exists()) {
-                globalSubjects = oldSnap.data().list || [];
-                // Save it to the new location
+                // Migrate old list to objects with default day
+                const oldList = oldSnap.data().list || [];
+                globalSubjects = oldList.map(item => {
+                    // Check if item is object or string (handle legacy)
+                    if (typeof item === 'string') return { name: item, day: 'Monday' };
+                    return { ...item, day: item.day || 'Monday' };
+                });
+                
                 await setDoc(doc(db, "settings", "subjects_CE"), { list: globalSubjects });
                 return;
             }
@@ -233,11 +273,21 @@ async function loadGlobalSubjects(dept = 'CE') {
         if (snap.exists()) {
             globalSubjects = snap.data().list || [];
         } else {
-            // Default Init based on department
-            if (targetDept === 'CS') { // CS & SE share this
-                globalSubjects = [{name:"Algorithms"}, {name:"Machine Learning"}, {name:"Data Science"}, {name:"Networking"}];
+            // Default Init based on department (With Days)
+            if (targetDept === 'CS') { 
+                globalSubjects = [
+                    {name:"Algorithms", day:"Monday"}, 
+                    {name:"Machine Learning", day:"Tuesday"}, 
+                    {name:"Data Science", day:"Wednesday"}, 
+                    {name:"Networking", day:"Thursday"}
+                ];
             } else {
-                globalSubjects = [{name:"OS"}, {name:"CAL"}, {name:"AOOP"}, {name:"SDI"}];
+                globalSubjects = [
+                    {name:"OS", day:"Monday"}, 
+                    {name:"CAL", day:"Tuesday"}, 
+                    {name:"AOOP", day:"Wednesday"}, 
+                    {name:"SDI", day:"Thursday"}
+                ];
             }
             await setDoc(doc(db, "settings", `subjects_${targetDept}`), { list: globalSubjects });
         }
@@ -289,36 +339,79 @@ async function loadStudentData(email) {
         }
     }
 
+    // --- ALERT LOGIC (Scan ALL subjects) ---
+    const lowAttSubjects = [];
+    globalSubjects.forEach(sub => {
+        const mySub = sSubjects.find(s => s.name === sub.name);
+        const attended = mySub ? (parseInt(mySub.attended) || 0) : 0;
+        const total = mySub ? (parseInt(mySub.total) || 0) : 0;
+        
+        // Only alert if classes have started (total > 0)
+        if (total > 0) {
+            const pct = Math.round((attended / total) * 100);
+            if (pct < 80) lowAttSubjects.push(sub.name);
+        }
+    });
+
+    const alertBox = document.getElementById('low-attendance-alert');
+    const alertText = document.getElementById('alert-subjects');
+    if (lowAttSubjects.length > 0) {
+        alertBox.classList.remove('hidden');
+        alertText.textContent = lowAttSubjects.join(', ');
+    } else {
+        alertBox.classList.add('hidden');
+    }
+
+    // --- RENDERING LOGIC ---
     const container = document.getElementById('subjects-container');
     container.innerHTML = '';
+    
+    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    // Determine Today's Day Name
+    const todayIndex = new Date().getDay(); // 0=Sun, 1=Mon...
+    // Map JS Day (0=Sun) to our Array
+    const jsDayMap = { 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday", 0: "Sunday" };
+    const currentDayName = jsDayMap[todayIndex];
 
-    let totalPercent = 0;
-    let validCount = 0;
+    let subjectsToRender = [];
+    let isGroupedView = false;
 
-    // 2. Iterate over GLOBAL subjects (so everyone sees the same list)
-    globalSubjects.forEach(sub => {
-        // Find if student has personal data for this subject
+    if (currentViewMode === 'today') {
+        // Show only today's subjects
+        subjectsToRender = globalSubjects.filter(s => s.day === currentDayName);
+        if (subjectsToRender.length === 0) {
+            container.innerHTML = `
+                <div class="text-center p-8 bg-white rounded-xl shadow-sm border border-gray-100">
+                    <p class="text-xl font-bold text-gray-400">No classes scheduled for ${currentDayName}!</p>
+                    <p class="text-gray-400 mt-2">Enjoy your free time.</p>
+                </div>`;
+            // Calculate overall even if empty
+            updateOverallChart(globalSubjects, sSubjects);
+            return; 
+        }
+    } else {
+        // 'all' view -> Use grouped rendering logic
+        isGroupedView = true;
+        subjectsToRender = globalSubjects; 
+    }
+
+    // Helper to generate card HTML
+    const createCard = (sub) => {
         const mySub = sSubjects.find(s => s.name === sub.name);
-        
-        // Default to 0 if not found
         const attended = mySub ? (parseInt(mySub.attended) || 0) : 0;
         const total = mySub ? (parseInt(mySub.total) || 0) : 0;
         
         let pct = (total > 0) ? Math.round((attended / total) * 100) : 0;
         const color = pct < 80 ? "text-red-600" : "text-green-600";
         const border = pct < 80 ? "border-red-200" : "border-blue-100";
-
-        // If total is 0, show a neutral state
         const pctDisplay = (total === 0) ? "No Classes" : `${pct}%`;
         const pctColor = (total === 0) ? "text-gray-400" : color;
 
-        // Generate History HTML & Check Cooldown
         let historyHTML = '';
         let isOnCooldown = false;
         let timeLeft = '';
 
         if (mySub && mySub.history && mySub.history.length > 0) {
-            // Check Cooldown
             const lastEntry = mySub.history[mySub.history.length - 1];
             const lastDate = new Date(lastEntry.timestamp);
             const now = new Date();
@@ -330,7 +423,6 @@ async function loadStudentData(email) {
                 timeLeft = `${hoursRemaining}h wait`;
             }
 
-            // Show last 5 entries
             const reversed = [...mySub.history].reverse().slice(0, 5);
             reversed.forEach(h => {
                 const badgeColor = h.status === 'present' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
@@ -345,14 +437,13 @@ async function loadStudentData(email) {
             historyHTML = '<p class="text-xs text-gray-400 italic">No history yet.</p>';
         }
 
-        // Button Styles based on Cooldown
         const btnState = isOnCooldown ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-600 shadow-sm';
         const missState = isOnCooldown ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-200';
         const disabledAttr = isOnCooldown ? 'disabled' : '';
         const cooldownMsg = isOnCooldown ? `<span class="text-xs text-orange-500 font-bold ml-2">(${timeLeft})</span>` : '';
 
-        container.innerHTML += `
-            <div class="p-5 rounded-xl border ${border} bg-white shadow-sm flex flex-col justify-between h-full">
+        return `
+            <div class="p-5 rounded-xl border ${border} bg-white shadow-sm flex flex-col justify-between h-full fade-in">
                 <div>
                     <div class="flex justify-between mb-2">
                         <h4 class="font-bold text-gray-700 text-lg flex items-center">
@@ -363,7 +454,6 @@ async function loadStudentData(email) {
                     </div>
                     <div class="text-4xl font-bold ${pctColor} mb-4">${pctDisplay}</div>
                     
-                    <!-- HISTORY SECTION -->
                     <div class="mb-4 border-t pt-2">
                         <p class="text-xs font-bold text-gray-400 mb-1">RECENT ACTIVITY</p>
                         <div class="space-y-1">
@@ -377,9 +467,59 @@ async function loadStudentData(email) {
                 </div>
             </div>
         `;
+    };
 
+    if (isGroupedView) {
+        // Group by Day
+        const subjectsByDay = {};
+        days.concat(['Other']).forEach(d => subjectsByDay[d] = []);
+        
+        globalSubjects.forEach(sub => {
+            const d = sub.day || 'Other';
+            if(subjectsByDay[d]) subjectsByDay[d].push(sub);
+            else subjectsByDay['Other'].push(sub);
+        });
+
+        days.concat(['Other']).forEach(dayName => {
+            const daySubjects = subjectsByDay[dayName];
+            if(!daySubjects || daySubjects.length === 0) return;
+
+            const section = document.createElement('div');
+            section.className = "day-section";
+            section.innerHTML = `<h3 class="text-xl font-bold text-gray-800 mb-3 border-b pb-1 border-gray-200">${dayName}</h3>`;
+            
+            const grid = document.createElement('div');
+            grid.className = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4";
+            
+            daySubjects.forEach(sub => {
+                grid.innerHTML += createCard(sub);
+            });
+            section.appendChild(grid);
+            container.appendChild(section);
+        });
+    } else {
+        // Flat List (Today View)
+        const grid = document.createElement('div');
+        grid.className = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4";
+        subjectsToRender.forEach(sub => {
+            grid.innerHTML += createCard(sub);
+        });
+        container.appendChild(grid);
+    }
+
+    updateOverallChart(globalSubjects, sSubjects);
+}
+
+function updateOverallChart(allSubs, studentSubs) {
+    let totalPercent = 0;
+    let validCount = 0;
+
+    allSubs.forEach(sub => {
+        const mySub = studentSubs.find(s => s.name === sub.name);
+        const attended = mySub ? (parseInt(mySub.attended) || 0) : 0;
+        const total = mySub ? (parseInt(mySub.total) || 0) : 0;
         if (total > 0) {
-            totalPercent += pct;
+            totalPercent += Math.round((attended / total) * 100);
             validCount++;
         }
     });
@@ -388,15 +528,13 @@ async function loadStudentData(email) {
     
     // UPDATE CHART TEXT
     const ovEl = document.getElementById('overall-percent');
-    ovEl.textContent = overall + "%";
+    if(ovEl) ovEl.textContent = overall + "%";
     
-    // UPDATE CHART RING (CSS Conic Gradient)
+    // UPDATE CHART RING
     const ring = document.getElementById('chart-ring');
-    const color = overall < 80 ? '#f87171' : '#4ade80'; // Red if low, Green if good
+    const color = overall < 80 ? '#f87171' : '#4ade80'; 
     const emptyColor = '#ffffff33';
-    
-    // Example: conic-gradient(green 0% 80%, white 80% 100%)
-    ring.style.background = `conic-gradient(${color} 0% ${overall}%, ${emptyColor} ${overall}% 100%)`;
+    if(ring) ring.style.background = `conic-gradient(${color} 0% ${overall}%, ${emptyColor} ${overall}% 100%)`;
 }
 
 async function updateAttendance(email, subName, status) {
@@ -422,7 +560,7 @@ async function updateAttendance(email, subName, status) {
     
     // Create subject if new
     if (idx === -1) {
-        data.subjects.push({ 
+        data.subjects.push({
             name: subName, 
             attended: 0, 
             total: 0,
@@ -483,17 +621,62 @@ function showStudentView() {
 function renderAdminSubjects() {
     const box = document.getElementById('admin-subjects-list');
     box.innerHTML = '';
-    globalSubjects.forEach(s => {
+    // Sort by Day then Name
+    const daysOrder = { "Monday": 1, "Tuesday": 2, "Wednesday": 3, "Thursday": 4, "Friday": 5, "Saturday": 6, "Sunday": 7 };
+    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+    const sorted = [...globalSubjects].sort((a, b) => {
+        const da = daysOrder[a.day] || 8;
+        const db = daysOrder[b.day] || 8;
+        return da - db;
+    });
+
+    sorted.forEach(s => {
+        // Build Day Options
+        let dayOptions = '';
+        days.forEach(d => {
+            const sel = (s.day === d) ? 'selected' : '';
+            // Show short name (Mon, Tue) in dropdown to save space
+            dayOptions += `<option value="${d}" ${sel}>${d.substring(0,3)}</option>`;
+        });
+
         box.innerHTML += `
-            <span class="bg-blue-50 text-blue-800 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2 border border-blue-200">
-                ${s.name} <button onclick="deleteSubject('${s.name}')" class="text-red-500 ml-1">x</button>
-            </span>
+            <div class="bg-blue-50 text-blue-800 px-2 py-1 rounded-full text-sm font-bold flex items-center gap-2 border border-blue-200 shadow-sm">
+                <select onchange="updateSubjectDay('${s.name}', this.value)" class="bg-white border border-blue-200 rounded text-xs font-bold text-gray-500 uppercase focus:outline-none cursor-pointer py-0.5 px-1">
+                    ${dayOptions}
+                </select>
+                <span>${s.name}</span>
+                <button onclick="deleteSubject('${s.name}')" class="text-red-400 hover:text-red-600 ml-1 font-bold px-1 rounded hover:bg-red-50">×</button>
+            </div>
         `;
     });
 }
+
+async function updateSubjectDay(name, newDay) {
+    let dept = document.getElementById('admin-dept-select').value;
+    if (dept === 'SE') dept = 'CS';
+
+    // Update local state
+    const subIndex = globalSubjects.findIndex(s => s.name === name);
+    if(subIndex > -1) {
+        globalSubjects[subIndex].day = newDay;
+    }
+
+    try {
+        await setDoc(doc(db, "settings", `subjects_${dept}`), { list: globalSubjects });
+        renderAdminSubjects(); // Re-sort and render
+    } catch (e) {
+        alert("Error updating day: " + e.message);
+        renderAdminSubjects(); // Revert on error
+    }
+}
+
 async function addSubject() {
     const input = document.getElementById('new-subject-name');
+    const dayInput = document.getElementById('new-subject-day');
     const val = input.value.trim();
+    const dayVal = dayInput.value;
+    
     let dept = document.getElementById('admin-dept-select').value;
     
     // CS and SE share the same subjects
@@ -516,7 +699,7 @@ async function addSubject() {
         let currentList = [];
         if(snap.exists()) currentList = snap.data().list || [];
 
-        currentList.push({name: val});
+        currentList.push({name: val, day: dayVal});
         
         await setDoc(doc(db, "settings", `subjects_${dept}`), { list: currentList });
         
@@ -526,7 +709,7 @@ async function addSubject() {
         input.value = '';
         renderAdminSubjects();
         renderAdminStudentInputs();
-        alert(`Added subject: ${val} to ${dept} (Shared with SE)`);
+        alert(`Added subject: ${val} (${dayVal}) to ${dept}`);
     } catch (e) {
         alert("Error adding subject: " + e.message);
     }
