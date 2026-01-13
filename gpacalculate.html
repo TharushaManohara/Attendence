@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KDU GPA Calculator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 { text-align: center; color: #333; margin-bottom: 10px; }
+        
+        /* Navigation Tabs */
+        .year-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            background-color: white;
+            border: 2px solid #ddd;
+            border-radius: 25px;
+            padding: 10px 25px;
+            font-size: 1rem;
+            font-weight: bold;
+            color: #555;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .tab-btn:hover {
+            border-color: #0056b3;
+            color: #0056b3;
+        }
+
+        .tab-btn.active {
+            background-color: #0056b3;
+            color: white;
+            border-color: #0056b3;
+            box-shadow: 0 4px 10px rgba(0,86,179,0.3);
+        }
+
+        /* Year Sections */
+        .year-section {
+            display: none;
+            animation: fadeIn 0.4s ease-in-out;
+        }
+        .year-section.active { display: block; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h2 {
+            border-bottom: 2px solid #0056b3;
+            padding-bottom: 10px;
+            margin-top: 30px;
+            color: #0056b3;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+            vertical-align: middle;
+        }
+
+        th {
+            background-color: #0056b3;
+            color: white;
+            font-weight: 600;
+        }
+
+        /* Inputs */
+        input[type="text"], input[type="number"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: inherit;
+        }
+
+        input.code-input { width: 100%; box-sizing: border-box; }
+        input.credit-input { width: 60px; text-align: center; }
+        input.grade-input { 
+            width: 60px; 
+            text-align: center; 
+            font-weight: bold; 
+            text-transform: uppercase;
+            border: 2px solid #ddd;
+        }
+        input.grade-input:focus { border-color: #0056b3; outline: none; }
+        input[readonly] {
+            background-color: #f9f9f9;
+            border: 1px solid transparent;
+            cursor: default;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        .btn-add {
+            background-color: #e9ecef;
+            color: #0056b3;
+            font-size: 0.9rem;
+            display: none; /* Hidden by default */
+        }
+        .btn-add:hover { background-color: #dee2e6; }
+        
+        .btn-del {
+            background-color: #ffebee;
+            color: #c62828;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 1.2rem;
+            line-height: 1;
+            display: none; /* Hidden by default */
+        }
+        .btn-del:hover { background-color: #ffcdd2; }
+
+        /* Results */
+        .result-box {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: right;
+            font-size: 1.1rem;
+            font-weight: bold;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .gpa-value {
+            color: #28a745;
+            font-size: 1.4rem;
+            min-width: 60px;
+            display: inline-block;
+            text-align: center;
+        }
+
+        /* Year GPA Box */
+        .year-box {
+            background: linear-gradient(135deg, #0056b3 0%, #004494 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 40px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,86,179,0.2);
+        }
+        .year-title { font-size: 1.2rem; opacity: 0.9; margin-bottom: 5px; }
+        .year-gpa { font-size: 3rem; font-weight: 800; line-height: 1; }
+
+        .error-msg {
+            color: #dc3545;
+            font-size: 0.8rem;
+            margin-right: 15px;
+            display: none;
+        }
+
+        /* Admin Tag */
+        #admin-tag {
+            background: #e0f2f1;
+            color: #00695c;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            display: none;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+
+        /* Back Button */
+        .back-nav {
+            margin-bottom: 20px;
+        }
+        .back-nav a {
+            text-decoration: none;
+            color: #666;
+            font-weight: bold;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .back-nav a:hover { color: #0056b3; }
+    </style>
+</head>
+<body>
+
+    <div class="back-nav">
+        <a href="index.html">&larr; Back to Dashboard</a>
+    </div>
+
+    <h1>
+        Academic Performance
+        <span id="admin-tag">Admin Mode</span>
+    </h1>
+    
+    <!-- TABS -->
+    <div class="year-tabs">
+        <button class="tab-btn active" onclick="switchTab(1)">Year 1</button>
+        <button class="tab-btn" onclick="switchTab(2)">Year 2</button>
+        <button class="tab-btn" onclick="switchTab(3)">Year 3</button>
+        <button class="tab-btn" onclick="switchTab(4)">Year 4</button>
+    </div>
+
+    <!-- YEAR 1 CONTENT -->
+    <div id="year1-section" class="year-section active">
+        <!-- Sem 1 -->
+        <div id="sem1-container">
+            <h2>Semester 1 <button id="btn-add-sem1" class="btn btn-add" onclick="addRow('sem1')">+ Subject</button></h2>
+            <table>
+                <thead><tr><th style="width:40%">Subject</th><th style="width:20%">Credits</th><th style="width:20%">Grade</th><th style="width:10%"></th></tr></thead>
+                <tbody id="sem1-body"></tbody>
+            </table>
+            <div class="result-box"><span id="sem1-error" class="error-msg">Error</span>Sem 1 GPA: <span id="sem1-gpa" class="gpa-value">0.00</span></div>
+        </div>
+        <!-- Sem 2 -->
+        <div id="sem2-container">
+            <h2>Semester 2 <button id="btn-add-sem2" class="btn btn-add" onclick="addRow('sem2')">+ Subject</button></h2>
+            <table>
+                <thead><tr><th style="width:40%">Subject</th><th style="width:20%">Credits</th><th style="width:20%">Grade</th><th style="width:10%"></th></tr></thead>
+                <tbody id="sem2-body"></tbody>
+            </table>
+            <div class="result-box"><span id="sem2-error" class="error-msg">Error</span>Sem 2 GPA: <span id="sem2-gpa" class="gpa-value">0.00</span></div>
+        </div>
+        <!-- Year 1 Total -->
+        <div class="year-box">
+            <div class="year-title">1st Year GPA</div>
+            <div id="year1-gpa" class="year-gpa">0.00</div>
+        </div>
+    </div>
+
+    <!-- YEAR 2 CONTENT -->
+    <div id="year2-section" class="year-section">
+        <!-- Sem 3 -->
+        <div id="sem3-container">
+            <h2>Semester 3 <button id="btn-add-sem3" class="btn btn-add" onclick="addRow('sem3')">+ Subject</button></h2>
+            <table>
+                <thead><tr><th style="width:40%">Subject</th><th style="width:20%">Credits</th><th style="width:20%">Grade</th><th style="width:10%"></th></tr></thead>
+                <tbody id="sem3-body"></tbody>
+            </table>
+            <div class="result-box"><span id="sem3-error" class="error-msg">Error</span>Sem 3 GPA: <span id="sem3-gpa" class="gpa-value">0.00</span></div>
+        </div>
+        <!-- Sem 4 -->
+        <div id="sem4-container">
+            <h2>Semester 4 <button id="btn-add-sem4" class="btn btn-add" onclick="addRow('sem4')">+ Subject</button></h2>
+            <table>
+                <thead><tr><th style="width:40%">Subject</th><th style="width:20%">Credits</th><th style="width:20%">Grade</th><th style="width:10%"></th></tr></thead>
+                <tbody id="sem4-body"></tbody>
+            </table>
+            <div class="result-box"><span id="sem4-error" class="error-msg">Error</span>Sem 4 GPA: <span id="sem4-gpa" class="gpa-value">0.00</span></div>
+        </div>
+        <!-- Year 2 Total -->
+        <div class="year-box">
+            <div class="year-title">2nd Year GPA</div>
+            <div id="year2-gpa" class="year-gpa">0.00</div>
+        </div>
+    </div>
+
+    <!-- YEAR 3 CONTENT -->
+    <div id="year3-section" class="year-section">
+        <!-- Sem 5 -->
+        <div id="sem5-container">
+            <h2>Semester 5 <button id="btn-add-sem5" class="btn btn-add" onclick="addRow('sem5')">+ Subject</button></h2>
+            <table>
+                <thead><tr><th style="width:40%">Subject</th><th style="width:20%">Credits</th><th style="width:20%">Grade</th><th style="width:10%"></th></tr></thead>
+                <tbody id="sem5-body"></tbody>
+            </table>
+            <div class="result-box"><span id="sem5-error" class="error-msg">Error</span>Sem 5 GPA: <span id="sem5-gpa" class="gpa-value">0.00</span></div>
+        </div>
+        <!-- Sem 6 -->
+        <div id="sem6-container">
+            <h2>Semester 6 <button id="btn-add-sem6" class="btn btn-add" onclick="addRow('sem6')">+ Subject</button></h2>
+            <table>
+                <thead><tr><th style="width:40%">Subject</th><th style="width:20%">Credits</th><th style="width:20%">Grade</th><th style="width:10%"></th></tr></thead>
+                <tbody id="sem6-body"></tbody>
+            </table>
+            <div class="result-box"><span id="sem6-error" class="error-msg">Error</span>Sem 6 GPA: <span id="sem6-gpa" class="gpa-value">0.00</span></div>
+        </div>
+        <!-- Year 3 Total -->
+        <div class="year-box">
+            <div class="year-title">3rd Year GPA</div>
+            <div id="year3-gpa" class="year-gpa">0.00</div>
+        </div>
+    </div>
+
+    <!-- YEAR 4 CONTENT -->
+    <div id="year4-section" class="year-section">
+        <!-- Sem 7 -->
+        <div id="sem7-container">
+            <h2>Semester 7 <button id="btn-add-sem7" class="btn btn-add" onclick="addRow('sem7')">+ Subject</button></h2>
+            <table>
+                <thead><tr><th style="width:40%">Subject</th><th style="width:20%">Credits</th><th style="width:20%">Grade</th><th style="width:10%"></th></tr></thead>
+                <tbody id="sem7-body"></tbody>
+            </table>
+            <div class="result-box"><span id="sem7-error" class="error-msg">Error</span>Sem 7 GPA: <span id="sem7-gpa" class="gpa-value">0.00</span></div>
+        </div>
+        <!-- Sem 8 -->
+        <div id="sem8-container">
+            <h2>Semester 8 <button id="btn-add-sem8" class="btn btn-add" onclick="addRow('sem8')">+ Subject</button></h2>
+            <table>
+                <thead><tr><th style="width:40%">Subject</th><th style="width:20%">Credits</th><th style="width:20%">Grade</th><th style="width:10%"></th></tr></thead>
+                <tbody id="sem8-body"></tbody>
+            </table>
+            <div class="result-box"><span id="sem8-error" class="error-msg">Error</span>Sem 8 GPA: <span id="sem8-gpa" class="gpa-value">0.00</span></div>
+        </div>
+        <!-- Year 4 Total -->
+        <div class="year-box">
+            <div class="year-title">4th Year GPA</div>
+            <div id="year4-gpa" class="year-gpa">0.00</div>
+        </div>
+    </div>
+
+    <!-- FIREBASE & LOGIC -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBukN8wDNA0KKFFlU5L-hKkYVbdMUa3hdc",
+            authDomain: "attendence-3c92a.firebaseapp.com",
+            projectId: "attendence-3c92a",
+            storageBucket: "attendence-3c92a.firebasestorage.app",
+            messagingSenderId: "256631640444",
+            appId: "1:256631640444:web:a1d8170ea6934bfe6d14f9",
+            measurementId: "G-DTV1VPV163"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+
+        // --- GLOBAL STATE ---
+        window.isAdmin = false;
+        const ADMIN_EMAIL = "tharusha@uni.com";
+
+        // Grade Mapping
+        const gradeMap = {
+            "A+": 4.0, "A": 4.0, "A-": 3.7,
+            "B+": 3.3, "B": 3.0, "B-": 2.7,
+            "C+": 2.3, "C": 2.0, "C-": 1.7,
+            "D+": 1.3, "D": 1.0, "E": 0.0
+        };
+
+        // Initialize Data for 8 Semesters
+        window.semesterData = {
+            sem1: [
+                { id: 1, code: "SDM", credits: 2, grade: "" },
+                { id: 2, code: "PL", credits: 1, grade: "" },
+                { id: 3, code: "FP", credits: 2, grade: "" },
+                { id: 4, code: "FDB", credits: 2, grade: "" },
+                { id: 5, code: "FCS", credits: 2, grade: "" },
+                { id: 6, code: "P&S", credits: 3, grade: "" },
+                { id: 7, code: "MTC", credits: 2, grade: "" },
+                { id: 8, code: "CSA", credits: 3, grade: "" }
+            ],
+            sem2: [
+                { id: 9, code: "CN", credits: 3, grade: "" },
+                { id: 10, code: "WD", credits: 2, grade: "" },
+                { id: 11, code: "OOP", credits: 3, grade: "" },
+                { id: 12, code: "FEE", credits: 2, grade: "" },
+                { id: 13, code: "BE", credits: 2, grade: "" },
+                { id: 14, code: "DM", credits: 2, grade: "" },
+                { id: 15, code: "CMT", credits: 1, grade: "" }
+            ],
+            // Init others empty or with placeholders
+            sem3: [], sem4: [],
+            sem5: [], sem6: [],
+            sem7: [], sem8: []
+        };
+
+        // --- AUTH ---
+        onAuthStateChanged(auth, (user) => {
+            if (user && user.email === ADMIN_EMAIL) {
+                window.isAdmin = true;
+                document.getElementById('admin-tag').style.display = 'inline-block';
+                // Show Add Buttons
+                document.querySelectorAll('.btn-add').forEach(b => b.style.display = 'inline-block');
+            } else {
+                window.isAdmin = false;
+                document.getElementById('admin-tag').style.display = 'none';
+                document.querySelectorAll('.btn-add').forEach(b => b.style.display = 'none');
+            }
+            renderAllTables();
+        });
+
+        // --- TAB LOGIC ---
+        window.switchTab = function(year) {
+            // Update Buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-btn')[year-1].classList.add('active');
+
+            // Update Sections
+            document.querySelectorAll('.year-section').forEach(sec => sec.classList.remove('active'));
+            document.getElementById(`year${year}-section`).classList.add('active');
+        };
+
+        // --- DATA OPS ---
+        window.addRow = function(semKey) {
+            if (!window.isAdmin) return;
+            window.semesterData[semKey].push({ id: Date.now(), code: "", credits: 2, grade: "" });
+            renderTable(semKey);
+        };
+
+        window.deleteRow = function(semKey, index) {
+            if (!window.isAdmin) return;
+            if (confirm("Remove this subject?")) {
+                window.semesterData[semKey].splice(index, 1);
+                renderTable(semKey);
+            }
+        };
+
+        window.updateData = function(semKey, index, field, value) {
+            // Access Rule: Code (Admin Only), Credits/Grade (Everyone)
+            if (!window.isAdmin && field === 'code') return;
+
+            if (field === 'credits') {
+                window.semesterData[semKey][index][field] = parseFloat(value) || 0;
+            } else if (field === 'grade') {
+                window.semesterData[semKey][index][field] = value.toUpperCase();
+            } else {
+                window.semesterData[semKey][index][field] = value;
+            }
+            // Recalculate specific year related to this semester
+            calculateAll();
+        };
+
+        window.handleEnter = function(e, semKey, index) {
+            if (e.key === 'Enter') {
+                const nextIdx = index + 1;
+                const inputs = document.querySelectorAll(`#${semKey}-body tr`);
+                if (inputs[nextIdx]) inputs[nextIdx].querySelector('.grade-input').focus();
+            }
+        };
+
+        function renderAllTables() {
+            ['sem1','sem2','sem3','sem4','sem5','sem6','sem7','sem8'].forEach(key => renderTable(key));
+        }
+
+        function renderTable(semKey) {
+            const tbody = document.getElementById(`${semKey}-body`);
+            tbody.innerHTML = "";
+
+            const subs = window.semesterData[semKey];
+            if (subs.length === 0) {
+                // tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#999;font-style:italic">No subjects added.</td></tr>`;
+                // Intentionally left empty is fine too, but let's just let it handle empty rows
+            }
+
+            subs.forEach((sub, index) => {
+                const tr = document.createElement('tr');
+                const codeReadOnly = window.isAdmin ? '' : 'readonly';
+                const deleteBtnDisplay = window.isAdmin ? 'inline-block' : 'none';
+
+                tr.innerHTML = `
+                    <td>
+                        <input type="text" class="code-input" value="${sub.code}" ${codeReadOnly}
+                               oninput="updateData('${semKey}', ${index}, 'code', this.value)" placeholder="Subject">
+                    </td>
+                    <td>
+                        <input type="number" class="credit-input" value="${sub.credits}" min="0" step="1"
+                               oninput="updateData('${semKey}', ${index}, 'credits', this.value)">
+                    </td>
+                    <td>
+                        <input type="text" class="grade-input" value="${sub.grade}" maxlength="3" placeholder="-"
+                               oninput="updateData('${semKey}', ${index}, 'grade', this.value)"
+                               onkeydown="handleEnter(event, '${semKey}', ${index})">
+                    </td>
+                    <td style="text-align: center;">
+                        <button class="btn btn-del" style="display: ${deleteBtnDisplay}" 
+                                onclick="deleteRow('${semKey}', ${index})" title="Remove">&times;</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            calculateAll();
+        }
+
+        function calculateAll() {
+            // Calculate Years 1 to 4
+            calculateYear(1, 'sem1', 'sem2');
+            calculateYear(2, 'sem3', 'sem4');
+            calculateYear(3, 'sem5', 'sem6');
+            calculateYear(4, 'sem7', 'sem8');
+        }
+
+        function calculateYear(yearNum, k1, k2) {
+            const r1 = calculateSemester(k1);
+            const r2 = calculateSemester(k2);
+
+            const totalPoints = r1.points + r2.points;
+            const totalCredits = r1.credits + r2.credits;
+            
+            const el = document.getElementById(`year${yearNum}-gpa`);
+            if(el) {
+                el.innerText = (totalCredits > 0) ? (totalPoints / totalCredits).toFixed(2) : "0.00";
+            }
+        }
+
+        function calculateSemester(semKey) {
+            const subs = window.semesterData[semKey];
+            let totalPoints = 0;
+            let totalCredits = 0;
+            let hasError = false;
+
+            subs.forEach(sub => {
+                const g = sub.grade.trim();
+                if (g !== "") {
+                    if (gradeMap[g] !== undefined) {
+                        totalPoints += (gradeMap[g] * sub.credits);
+                        totalCredits += sub.credits;
+                    } else {
+                        hasError = true;
+                    }
+                }
+            });
+
+            const errEl = document.getElementById(`${semKey}-error`);
+            const gpaEl = document.getElementById(`${semKey}-gpa`);
+            
+            if(errEl && gpaEl) {
+                if (hasError) {
+                    errEl.style.display = "inline";
+                    gpaEl.innerText = "Error";
+                } else {
+                    errEl.style.display = "none";
+                    gpaEl.innerText = (totalCredits > 0) ? (totalPoints / totalCredits).toFixed(2) : "0.00";
+                }
+            }
+
+            return { points: totalPoints, credits: totalCredits };
+        }
+
+        // Init
+        document.addEventListener("DOMContentLoaded", () => {
+            renderAllTables();
+        });
+
+    </script>
+</body>
+</html>
