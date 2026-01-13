@@ -211,6 +211,11 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
             margin-bottom: 20px;
         }
+
+        /* Hide Dept Selector by default (Shown only for Admin) */
+        #dept-container {
+            display: none;
+        }
         
         select {
             padding: 8px 12px;
@@ -254,13 +259,17 @@
             <a href="index.html">&larr; Dashboard</a>
         </div>
         
-        <div>
+        <div id="dept-container">
             <label for="dept-select" style="font-weight:bold; margin-right:5px; color:#555;">Department:</label>
             <select id="dept-select" onchange="changeDept(this.value)">
                 <option value="CE">Computer Engineering (CE)</option>
                 <option value="CS">Computer Science (CS)</option>
                 <option value="SE">Software Engineering (SE)</option>
             </select>
+        </div>
+        
+        <div id="student-dept-display" style="display:none; font-weight:bold; color:#0056b3;">
+            Department: <span id="current-dept-label">Loading...</span>
         </div>
     </div>
 
@@ -420,7 +429,7 @@
             "D+": 1.3, "D": 1.0, "E": 0.0
         };
 
-        // Defaults (Only used if DB is empty for a dept)
+        // Defaults
         const DEFAULT_CE = {
             sem1: [
                 { id: 1, code: "SDM", credits: 2, grade: "" },
@@ -447,27 +456,47 @@
 
         // --- AUTH ---
         onAuthStateChanged(auth, async (user) => {
-            if (user && user.email === ADMIN_EMAIL) {
-                window.isAdmin = true;
-                document.getElementById('admin-tag').style.display = 'inline-block';
-                document.getElementById('save-curriculum-btn').style.display = 'block';
-                document.querySelectorAll('.btn-add').forEach(b => b.style.display = 'inline-block');
-            } else {
-                window.isAdmin = false;
-                document.getElementById('admin-tag').style.display = 'none';
-                document.getElementById('save-curriculum-btn').style.display = 'none';
-                document.querySelectorAll('.btn-add').forEach(b => b.style.display = 'none');
-            }
-            
-            // Attempt to load user's dept if available, else default CE
-            if(user) {
+            if (user) {
+                // Determine Admin Status
+                if (user.email === ADMIN_EMAIL) {
+                    window.isAdmin = true;
+                    // Show Admin Controls
+                    document.getElementById('admin-tag').style.display = 'inline-block';
+                    document.getElementById('save-curriculum-btn').style.display = 'block';
+                    document.getElementById('dept-container').style.display = 'block'; // Show dropdown
+                    document.getElementById('student-dept-display').style.display = 'none'; // Hide label
+                    document.querySelectorAll('.btn-add').forEach(b => b.style.display = 'inline-block');
+                } else {
+                    window.isAdmin = false;
+                    // Show Student View
+                    document.getElementById('admin-tag').style.display = 'none';
+                    document.getElementById('save-curriculum-btn').style.display = 'none';
+                    document.getElementById('dept-container').style.display = 'none'; // Hide dropdown
+                    document.getElementById('student-dept-display').style.display = 'block'; // Show label
+                    document.querySelectorAll('.btn-add').forEach(b => b.style.display = 'none');
+                }
+
+                // Load User Department
                 const userDoc = await getDoc(doc(db, "attendance", user.email));
                 if(userDoc.exists() && userDoc.data().department) {
                     window.currentDept = userDoc.data().department;
-                    document.getElementById('dept-select').value = window.currentDept;
+                } else {
+                    window.currentDept = "CE"; // Default Fallback
                 }
+                
+                // Update UI Labels
+                document.getElementById('dept-select').value = window.currentDept;
+                document.getElementById('current-dept-label').innerText = window.currentDept;
+
+                // Load Data
+                await loadDeptCurriculum(window.currentDept);
+
+            } else {
+                // Not logged in -> Redirect or minimal view
+                // For now, default to CE and hide admin tools
+                window.isAdmin = false;
+                await loadDeptCurriculum("CE");
             }
-            await loadDeptCurriculum(window.currentDept);
         });
 
         // --- DEPT MANAGEMENT ---
@@ -489,6 +518,11 @@
                     ['sem3','sem4','sem5','sem6','sem7','sem8'].forEach(k => window.semesterData[k] = []);
                 }
                 
+                // Ensure all arrays exist
+                ['sem1','sem2','sem3','sem4','sem5','sem6','sem7','sem8'].forEach(k => {
+                    if(!window.semesterData[k]) window.semesterData[k] = [];
+                });
+
                 renderAllTables();
             } catch (e) {
                 console.error("Load Error", e);
