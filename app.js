@@ -47,6 +47,14 @@ document.addEventListener('DOMContentLoaded', () => {
         viewAll.addEventListener('click', () => setViewMode('all'));
     }
 
+    // Date Picker Listener
+    const datePicker = document.getElementById('attendance-date');
+    if (datePicker) {
+        datePicker.addEventListener('change', () => {
+            if (auth.currentUser) loadStudentData(auth.currentUser.email);
+        });
+    }
+
     document.getElementById('logout-btn').addEventListener('click', handleLogout);
     
     // Admin Buttons (may be hidden initially)
@@ -367,8 +375,14 @@ async function loadStudentData(email) {
     container.innerHTML = '';
     
     const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-    // Determine Today's Day Name
-    const todayIndex = new Date().getDay(); // 0=Sun, 1=Mon...
+    
+    // Determine Day Name from Date Picker
+    let targetDate = new Date();
+    if (dateInput.value) {
+        const [y, m, d] = dateInput.value.split('-').map(Number);
+        targetDate = new Date(y, m - 1, d);
+    }
+    const todayIndex = targetDate.getDay(); // 0=Sun, 1=Mon...
     // Map JS Day (0=Sun) to our Array
     const jsDayMap = { 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday", 0: "Sunday" };
     const currentDayName = jsDayMap[todayIndex];
